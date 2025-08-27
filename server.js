@@ -5,19 +5,31 @@ const cors = require('cors');
 const fs = require("fs");
 const path = require("path");
 const client = require("pg/lib/client");
+const { createClient } = require('@supabase/supabase-js');
+
+// Use the values from Supabase Project Settings
 
 require('dotenv').config();
+
+const supabase = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_ANON_KEY
+);
+
+console.log(process.env.SUPABASE_URL);
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
 const pool = new Pool({
-    user: process.env.PGUSER || "postgres",
-    host: process.env.PGHOST || "127.0.0.1",
-    password: process.env.PGPASSWORD || "varun8072884795",
-    database: process.env.PGDATABASE || "collections",
-    port: process.env.PGPORT || 5432,
+    user: process.env.PGUSER,
+    host: process.env.PGHOST,
+    password: process.env.PGPASSWORD,
+    database: process.env.PGDATABASE,
+    port: process.env.PGPORT,
+    connectionString: process.env.DATABASE_URL,
+    ssl: { rejectUnauthorized: false }
 });
 
 pool.connect()
@@ -423,19 +435,6 @@ app.put('/updateBillItems/:billId', async (req, res) => {
 });
 
 
-const uploadsDir = path.join(__dirname, "uploads");
-if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
-
-const storage = multer.diskStorage({
-    destination: (_req, _file, cb) => cb(null, uploadsDir),
-    filename: (_req, file, cb) => {
-        const safe = file.originalname.replace(/[^a-zA-Z0-9_.-]/g, "_");
-        cb(null, `${Date.now()}_${safe}`);
-    },
-});
-
-app.use("/uploads", express.static(uploadsDir));
-
 // === DB init ===
 async function init() {
     await pool.query(`
@@ -458,17 +457,74 @@ async function init() {
     `);
 }
 init().catch(console.error);
-const upload = multer({ dest: "uploads/" });
+const upload = multer({ storage: multer.memoryStorage() }); // keep file in memory
+require("dotenv").config();
+
+// Upload route to Supabase
+app.post("/upload", upload.single("image"), async (req, res) => {
+    try {
+        const file = req.file;
+        if (!file) {
+            return res.status(400).json({ error: "No file uploaded" });
+        }
+
+        const filename = `${Date.now()}-${file.originalname}`;
+
+        // Upload to Supabase bucket "uploads"
+        const { data, error } = await supabase.storage
+            .from("uploads")
+            .upload(filename, file.buffer, {
+                contentType: file.mimetype,
+            });
+
+        if (error) {
+            console.error("Supabase upload error:", error);
+            return res.status(500).json({ error: "Upload failed" });
+        }
+
+        // Get public URL
+        const { data: publicUrl } = supabase.storage
+            .from("uploads")
+            .getPublicUrl(filename);
+
+        res.json({ url: publicUrl.publicUrl });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Server error" });
+    }
+});
 // === Routes ===
 
-// Create entry
 app.post("/entries", upload.single("billPhoto"), async (req, res) => {
     try {
         const { supplier, date, totalCost } = req.body;
         if (!supplier || !date || totalCost == null) {
             return res.status(400).json({ error: "supplier, date, totalCost required" });
         }
-        const billPhotoUrl = req.file ? `/uploads/${req.file.filename}` : null;
+
+        let billPhotoUrl = null;
+        if (req.file) {
+            const filename = `${Date.now()}-${req.file.originalname}`;
+
+            // Upload to Supabase bucket "uploads"
+            const { error } = await supabase.storage
+                .from("uploads")
+                .upload(filename, req.file.buffer, {
+                    contentType: req.file.mimetype,
+                });
+
+            if (error) {
+                console.error("Supabase upload error:", error);
+                return res.status(500).json({ error: "Upload failed" });
+            }
+
+            // Get public URL
+            const { data: publicUrl } = supabase.storage
+                .from("uploads")
+                .getPublicUrl(filename);
+
+            billPhotoUrl = publicUrl.publicUrl;
+        }
 
         const q = `
             INSERT INTO goods_entries (supplier, date, total_cost, pending_amount, bill_photo_url)
@@ -484,8 +540,8 @@ app.post("/entries", upload.single("billPhoto"), async (req, res) => {
         console.error(e);
         res.status(500).json({ error: "Failed to create entry" });
     }
-    console.log(result.rows);
 });
+
 
 // List entries
 app.get("/entries", async (_req, res) => {
