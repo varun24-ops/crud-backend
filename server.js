@@ -463,9 +463,7 @@ require("dotenv").config();
 app.post("/upload", upload.single("image"), async (req, res) => {
     try {
         const file = req.file;
-        if (!file) {
-            return res.status(400).json({ error: "No file uploaded" });
-        }
+        if (!file) return res.status(400).json({ error: "No file uploaded" });
 
         const filename = `${Date.now()}-${file.originalname}`;
 
@@ -491,8 +489,7 @@ app.post("/upload", upload.single("image"), async (req, res) => {
         console.error(err);
         res.status(500).json({ error: "Server error" });
     }
-});
-// === Routes ===
+});// === Routes ===
 
 app.post("/entries", upload.single("billPhoto"), async (req, res) => {
     try {
@@ -543,27 +540,25 @@ app.post("/entries", upload.single("billPhoto"), async (req, res) => {
 
 
 // List entries
-app.get("/entries", async (_req, res) => {
+app.get("/entries", async (req, res) => {
     try {
-        const result = await pool.query(`
-            SELECT
-                id,
-                supplier,
-                to_char(date, 'YYYY-MM-DD') AS date,
-        total_cost::float AS "totalcost",
-        pending_amount::float AS "pendingamount",
-        bill_photo_url AS "billPhotoUrl"
+        const supplierFilter = req.query.supplier || "";
+        const query = `
+            SELECT id, supplier, to_char(date,'YYYY-MM-DD') AS date,
+                   total_cost::float AS "totalCost",
+                   pending_amount::float AS "pendingAmount",
+                   bill_photo_url AS "billPhotoUrl"
             FROM goods_entries
+            WHERE supplier ILIKE $1
             ORDER BY date DESC, id DESC
-        `);
-        console.log(result.rows);
-        res.json(result.rows);
+        `;
+        const { rows } = await pool.query(query, [`%${supplierFilter}%`]);
+        res.json(rows);
     } catch (err) {
-        console.error("Error in /entries:", err);
+        console.error("Error fetching entries:", err);
         res.status(500).send("Error fetching entries");
     }
 });
-
 // Get payments for entry
 app.get("/entries/:id/payments", async (req, res) => {
     try {
@@ -736,6 +731,7 @@ app.get('/getsales', async (req, res) => {
 
 
 app.listen(3000, () => console.log("Server running on port 3000"));
+
 
 
 
