@@ -40,7 +40,7 @@ pool.connect()
 const createTables = `
 -- Customers table
 CREATE TABLE IF NOT EXISTS customers (
-    customer_id SERIAL PRIMARY KEY,
+    id SERIAL PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
     phone VARCHAR(20),
     pending NUMERIC(10,2) DEFAULT 0,
@@ -49,7 +49,7 @@ CREATE TABLE IF NOT EXISTS customers (
 
 -- Products table
 CREATE TABLE IF NOT EXISTS products (
-    product_id SERIAL PRIMARY KEY,
+    id SERIAL PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
     cost NUMERIC(10,2) NOT NULL,
     photo TEXT
@@ -59,7 +59,7 @@ CREATE TABLE IF NOT EXISTS products (
 CREATE TABLE IF NOT EXISTS bills (
     bill_id SERIAL PRIMARY KEY,
     customer_id INT REFERENCES customers(customer_id) ON DELETE CASCADE,
-    bill_date TIMESTAMP DEFAULT NOW(),
+    date TIMESTAMP DEFAULT NOW(),
     name VARCHAR(100) NOT NULL,
     amount NUMERIC(10,2) NOT NULL,
     paid NUMERIC(10,2) DEFAULT 0,
@@ -789,5 +789,6 @@ app.get('/getsales', async (req, res) => {
 
 
 app.listen(3000, () => console.log("Server running on port 3000"));
+
 
 
