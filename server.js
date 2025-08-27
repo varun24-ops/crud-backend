@@ -92,13 +92,13 @@ CREATE TABLE IF NOT EXISTS bill_items (
 
 app.post('/postProducts', async (req, res) => {
     try {
-        const { name, category, cost, stock } = req.body;
+        const { name, cost } = req.body;
         const insertQuery = `
-            INSERT INTO products (name, category, cost, stock)
+            INSERT INTO products (name, cost)
             VALUES ($1, $2, $3, $4)
                 RETURNING *;
         `;
-        const result = await pool.query(insertQuery, [name, category, cost, stock]);
+        const result = await pool.query(insertQuery, [name, cost,]);
         res.json(result.rows[0]);
     } catch (err) {
         console.error("Error inserting product:", err);
@@ -789,6 +789,7 @@ app.get('/getsales', async (req, res) => {
 
 
 app.listen(3000, () => console.log("Server running on port 3000"));
+
 
 
 
