@@ -100,6 +100,7 @@ app.post('/postProducts', async (req, res) => {
                 RETURNING *;
         `;
         const result = await pool.query(insertQuery, [name, cost,]);
+        console.log(result.rows);
         res.json(result.rows[0]);
     } catch (err) {
         console.error("Error inserting product:", err);
@@ -790,6 +791,7 @@ app.get('/getsales', async (req, res) => {
 
 
 app.listen(3000, () => console.log("Server running on port 3000"));
+
 
 
 
