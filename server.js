@@ -494,43 +494,34 @@ app.post("/upload", upload.single("image"), async (req, res) => {
 app.post("/entries", upload.single("billPhoto"), async (req, res) => {
     try {
         const { supplier, date, totalCost } = req.body;
-        if (!supplier || !date || totalCost == null) {
+        if (!supplier || !date || totalCost == null)
             return res.status(400).json({ error: "supplier, date, totalCost required" });
-        }
 
         let billPhotoUrl = null;
         if (req.file) {
             const filename = `${Date.now()}-${req.file.originalname}`;
-
-            // Upload to Supabase bucket "uploads"
             const { error } = await supabase.storage
                 .from("uploads")
-                .upload(filename, req.file.buffer, {
-                    contentType: req.file.mimetype,
-                });
-
+                .upload(filename, req.file.buffer, { contentType: req.file.mimetype });
             if (error) {
                 console.error("Supabase upload error:", error);
                 return res.status(500).json({ error: "Upload failed" });
             }
-
-            // Get public URL
             const { data: publicUrl } = supabase.storage
                 .from("uploads")
                 .getPublicUrl(filename);
-
             billPhotoUrl = publicUrl.publicUrl;
         }
 
-        const q = `
+        const query = `
             INSERT INTO goods_entries (supplier, date, total_cost, pending_amount, bill_photo_url)
             VALUES ($1,$2,$3,$3,$4)
-                RETURNING id, supplier, to_char(date,'YYYY-MM-DD') as date,
-                total_cost::float AS "totalCost",
-                pending_amount::float AS "pendingAmount",
-                bill_photo_url AS "billPhotoUrl";
+            RETURNING id, supplier, to_char(date,'YYYY-MM-DD') as date,
+                      total_cost::float AS "totalCost",
+                      pending_amount::float AS "pendingAmount",
+                      bill_photo_url AS "billPhotoUrl";
         `;
-        const { rows } = await pool.query(q, [supplier, date, totalCost, billPhotoUrl]);
+        const { rows } = await pool.query(query, [supplier, date, totalCost, billPhotoUrl]);
         res.json(rows[0]);
     } catch (e) {
         console.error(e);
@@ -731,6 +722,7 @@ app.get('/getsales', async (req, res) => {
 
 
 app.listen(3000, () => console.log("Server running on port 3000"));
+
 
 
 
