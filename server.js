@@ -36,61 +36,6 @@ pool.connect()
     .then(() => console.log("Connected to PostgreSQL"))
     .catch(err => console.error("DB connection error:", err.stack));
 
-
-const createTables = `
--- Customers table
-CREATE TABLE IF NOT EXISTS customers (
-    id SERIAL PRIMARY KEY,
-    name VARCHAR(100) NOT NULL,
-    phone VARCHAR(20),
-    pending NUMERIC(10,2) DEFAULT 0,
-    image TEXT
-);
-
--- Products table
-CREATE TABLE IF NOT EXISTS products (
-    id SERIAL PRIMARY KEY,
-    name VARCHAR(100) NOT NULL,
-    cost NUMERIC(10,2) NOT NULL,
-    photo TEXT
-);
-
--- Bills table
-CREATE TABLE IF NOT EXISTS bills (
-    bill_id SERIAL PRIMARY KEY,
-    customer_id INT REFERENCES customers(id) ON DELETE CASCADE,
-    date TIMESTAMP DEFAULT NOW(),
-    name VARCHAR(100) NOT NULL,
-    amount NUMERIC(10,2) NOT NULL,
-    paid NUMERIC(10,2) DEFAULT 0,
-    pending NUMERIC(10,2) DEFAULT 0
-);
-
--- Bill items table
-CREATE TABLE IF NOT EXISTS bill_items (
-    item_id SERIAL PRIMARY KEY,
-    bill_id INT REFERENCES bills(bill_id) ON DELETE CASCADE,
-    product_id INT REFERENCES products(id) ON DELETE CASCADE,
-    quantity INT NOT NULL,
-    unit_price NUMERIC(10,2) NOT NULL,
-    subtotal NUMERIC(10,2) NOT NULL,
-    name VARCHAR(100)
-);
-
-`;
-
-(async () => {
-  try {
-    const client = await pool.connect();
-    await client.query(createTables);
-    console.log("✅ Tables created successfully");
-    client.release();
-  } catch (err) {
-    console.error("❌ Error creating tables:", err);
-  }
-})();
-//products-db
-
 app.post('/postProducts', async (req, res) => {
     try {
         const { name, cost } = req.body;
@@ -100,12 +45,12 @@ app.post('/postProducts', async (req, res) => {
                 RETURNING *;
         `;
         const result = await pool.query(insertQuery, [name, cost,]);
-        console.log(result.rows);
         res.json(result.rows[0]);
     } catch (err) {
         console.error("Error inserting product:", err);
         res.status(500).send("Database error");
     }
+    console.log(result.rows);
 });
 app.get('/getProduct', async (req, res) => {
     const result = await pool.query("SELECT * FROM products");
@@ -346,10 +291,10 @@ app.post('/postBill/:id', async (req, res) => {
 
 
         const insertQuery = `
-      INSERT INTO bills (customer_id, name, amount, paid, pending, date)
-      VALUES ($1, $2, $3, $4, $5, $6)
-      RETURNING bill_id, date
-    `;
+            INSERT INTO bills (customer_id, name, amount, paid, pending, date)
+            VALUES ($1, $2, $3, $4, $5, $6)
+                RETURNING bill_id, date
+        `;
 
         const result = await pool.query(insertQuery, [
             customerId,
@@ -493,18 +438,18 @@ app.put('/updateBillItems/:billId', async (req, res) => {
 async function init() {
     await pool.query(`
         CREATE TABLE IF NOT EXISTS goods_entries (
-             id SERIAL PRIMARY KEY,
-             supplier TEXT NOT NULL,
-             date DATE NOT NULL,
-             total_cost NUMERIC(12,2) NOT NULL,
+                                                     id SERIAL PRIMARY KEY,
+                                                     supplier TEXT NOT NULL,
+                                                     date DATE NOT NULL,
+                                                     total_cost NUMERIC(12,2) NOT NULL,
             pending_amount NUMERIC(12,2) NOT NULL,
             bill_photo_url TEXT
             );
     `);
     await pool.query(`
         CREATE TABLE IF NOT EXISTS payments (
-            id SERIAL PRIMARY KEY,
-            entry_id INT NOT NULL REFERENCES goods_entries(id) ON DELETE CASCADE,
+                                                id SERIAL PRIMARY KEY,
+                                                entry_id INT NOT NULL REFERENCES goods_entries(id) ON DELETE CASCADE,
             date DATE NOT NULL,
             amount NUMERIC(12,2) NOT NULL
             );
@@ -791,8 +736,6 @@ app.get('/getsales', async (req, res) => {
 
 
 app.listen(3000, () => console.log("Server running on port 3000"));
-
-
 
 
 
