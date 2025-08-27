@@ -36,6 +36,60 @@ pool.connect()
     .then(() => console.log("Connected to PostgreSQL"))
     .catch(err => console.error("DB connection error:", err.stack));
 
+
+const createTables = `
+-- Customers table
+CREATE TABLE IF NOT EXISTS customers (
+    customer_id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    phone VARCHAR(20),
+    pending NUMERIC(10,2) DEFAULT 0,
+    image TEXT
+);
+
+-- Products table
+CREATE TABLE IF NOT EXISTS products (
+    product_id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    cost NUMERIC(10,2) NOT NULL,
+    photo TEXT
+);
+
+-- Bills table
+CREATE TABLE IF NOT EXISTS bills (
+    bill_id SERIAL PRIMARY KEY,
+    customer_id INT REFERENCES customers(customer_id) ON DELETE CASCADE,
+    bill_date TIMESTAMP DEFAULT NOW(),
+    name VARCHAR(100) NOT NULL,
+    amount NUMERIC(10,2) NOT NULL,
+    paid NUMERIC(10,2) DEFAULT 0,
+    pending NUMERIC(10,2) DEFAULT 0
+);
+
+-- Bill items table
+CREATE TABLE IF NOT EXISTS bill_items (
+    item_id SERIAL PRIMARY KEY,
+    bill_id INT REFERENCES bills(bill_id) ON DELETE CASCADE,
+    product_id INT REFERENCES products(product_id) ON DELETE CASCADE,
+    quantity INT NOT NULL,
+    unit_price NUMERIC(10,2) NOT NULL,
+    subtotal NUMERIC(10,2) NOT NULL,
+    name VARCHAR(100)
+);
+`;
+
+(async () => {
+  try {
+    const client = await pool.connect();
+    await client.query(createTables);
+    console.log("✅ Tables created successfully");
+    client.release();
+  } catch (err) {
+    console.error("❌ Error creating tables:", err);
+  } finally {
+    await pool.end();
+  }
+})();
 //products-db
 
 app.post('/postProducts', async (req, res) => {
@@ -737,3 +791,4 @@ app.get('/getsales', async (req, res) => {
 
 
 app.listen(3000, () => console.log("Server running on port 3000"));
+
