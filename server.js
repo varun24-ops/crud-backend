@@ -86,8 +86,6 @@ CREATE TABLE IF NOT EXISTS bill_items (
     client.release();
   } catch (err) {
     console.error("❌ Error creating tables:", err);
-  } finally {
-    await pool.end();
   }
 })();
 //products-db
@@ -791,4 +789,5 @@ app.get('/getsales', async (req, res) => {
 
 
 app.listen(3000, () => console.log("Server running on port 3000"));
+
 
