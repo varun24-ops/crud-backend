@@ -58,7 +58,7 @@ CREATE TABLE IF NOT EXISTS products (
 -- Bills table
 CREATE TABLE IF NOT EXISTS bills (
     bill_id SERIAL PRIMARY KEY,
-    customer_id INT REFERENCES customers(customer_id) ON DELETE CASCADE,
+    customer_id INT REFERENCES customers(id) ON DELETE CASCADE,
     date TIMESTAMP DEFAULT NOW(),
     name VARCHAR(100) NOT NULL,
     amount NUMERIC(10,2) NOT NULL,
@@ -70,12 +70,13 @@ CREATE TABLE IF NOT EXISTS bills (
 CREATE TABLE IF NOT EXISTS bill_items (
     item_id SERIAL PRIMARY KEY,
     bill_id INT REFERENCES bills(bill_id) ON DELETE CASCADE,
-    product_id INT REFERENCES products(product_id) ON DELETE CASCADE,
+    product_id INT REFERENCES products(id) ON DELETE CASCADE,
     quantity INT NOT NULL,
     unit_price NUMERIC(10,2) NOT NULL,
     subtotal NUMERIC(10,2) NOT NULL,
     name VARCHAR(100)
 );
+
 `;
 
 (async () => {
@@ -789,6 +790,7 @@ app.get('/getsales', async (req, res) => {
 
 
 app.listen(3000, () => console.log("Server running on port 3000"));
+
 
 
 
