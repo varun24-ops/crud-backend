@@ -747,7 +747,7 @@ const cusupload = multer({ storage: multer.memoryStorage() }); // keep file in m
 require("dotenv").config();
 
 // Upload route to Supabase
-app.post("/cusupload", upload.single("image"), async (req, res) => {
+app.post("/cusupload", cusupload.single("image"), async (req, res) => {
     try {
         const file = req.file;
         if (!file) {
@@ -781,7 +781,7 @@ app.post("/cusupload", upload.single("image"), async (req, res) => {
 });
 // === Routes ===
 
-app.post("/cusentries", upload.single("billPhoto"), async (req, res) => {
+app.post("/cusentries", cusupload.single("billPhoto"), async (req, res) => {
     try {
         const { supplier, date, totalCost } = req.body;
         if (!supplier || !date || totalCost == null) {
@@ -993,6 +993,7 @@ app.delete("/cuspayments/:id", async (req, res) => {
     }
 });
 app.listen(3000, () => console.log("Server running on port 3000"));
+
 
 
 
