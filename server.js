@@ -722,8 +722,278 @@ app.get('/getsales', async (req, res) => {
     }
 });
 
+async function init() {
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS cus_entries (
+             id SERIAL PRIMARY KEY,
+             supplier TEXT NOT NULL,
+             date DATE NOT NULL,
+             total_cost NUMERIC(12,2) NOT NULL,
+            pending_amount NUMERIC(12,2) NOT NULL,
+            bill_photo_url TEXT
+            );
+    `);
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS cuspayments (
+            id SERIAL PRIMARY KEY,
+            entry_id INT NOT NULL REFERENCES cus_entries(id) ON DELETE CASCADE,
+            date DATE NOT NULL,
+            amount NUMERIC(12,2) NOT NULL
+            );
+    `);
+}
+init().catch(console.error);
+const cusupload = multer({ storage: multer.memoryStorage() }); // keep file in memory
+require("dotenv").config();
 
+// Upload route to Supabase
+app.post("/cusupload", upload.single("image"), async (req, res) => {
+    try {
+        const file = req.file;
+        if (!file) {
+            return res.status(400).json({ error: "No file uploaded" });
+        }
+
+        const filename = `${Date.now()}-${file.originalname}`;
+
+        // Upload to Supabase bucket "uploads"
+        const { data, error } = await supabase.storage
+            .from("cusuploads")
+            .upload(filename, file.buffer, {
+                contentType: file.mimetype,
+            });
+
+        if (error) {
+            console.error("Supabase upload error:", error);
+            return res.status(500).json({ error: "Upload failed" });
+        }
+
+        // Get public URL
+        const { data: publicUrl } = supabase.storage
+            .from("cusuploads")
+            .getPublicUrl(filename);
+
+        res.json({ url: publicUrl.publicUrl });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Server error" });
+    }
+});
+// === Routes ===
+
+app.post("/cusentries", upload.single("billPhoto"), async (req, res) => {
+    try {
+        const { supplier, date, totalCost } = req.body;
+        if (!supplier || !date || totalCost == null) {
+            return res.status(400).json({ error: "supplier, date, totalCost required" });
+        }
+
+        let billPhotoUrl = null;
+        if (req.file) {
+            const filename = `${Date.now()}-${req.file.originalname}`;
+
+            // Upload to Supabase bucket "uploads"
+            const { error } = await supabase.storage
+                .from("cusuploads")
+                .upload(filename, req.file.buffer, {
+                    contentType: req.file.mimetype,
+                });
+
+            if (error) {
+                console.error("Supabase upload error:", error);
+                return res.status(500).json({ error: "Upload failed" });
+            }
+
+            // Get public URL
+            const { data: publicUrl } = supabase.storage
+                .from("cusuploads")
+                .getPublicUrl(filename);
+
+            billPhotoUrl = publicUrl.publicUrl;
+        }
+
+        const q = `
+            INSERT INTO cus_entries (supplier, date, total_cost, pending_amount, bill_photo_url)
+            VALUES ($1,$2,$3,$3,$4)
+                RETURNING id, supplier, to_char(date,'YYYY-MM-DD') as date,
+                total_cost::float AS "totalCost",
+                pending_amount::float AS "pendingAmount",
+                bill_photo_url AS "billPhotoUrl";
+        `;
+        const { rows } = await pool.query(q, [supplier, date, totalCost, billPhotoUrl]);
+        res.json(rows[0]);
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ error: "Failed to create entry" });
+    }
+});
+
+
+// List entries
+app.get("/cusentries", async (_req, res) => {
+    try {
+        const result = await pool.query(`
+            SELECT
+                id,
+                supplier,
+                to_char(date, 'YYYY-MM-DD') AS date,
+        total_cost::float AS "totalcost",
+        pending_amount::float AS "pendingamount",
+        bill_photo_url AS "billPhotoUrl"
+            FROM cus_entries
+            ORDER BY date DESC, id DESC
+        `);
+        console.log(result.rows);
+        res.json(result.rows);
+    } catch (err) {
+        console.error("Error in /entries:", err);
+        res.status(500).send("Error fetching entries");
+    }
+});
+
+// Get payments for entry
+app.get("/cusentries/:id/cuspayments", async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { rows } = await pool.query(
+            `SELECT id, entry_id AS "entryId", to_char(date,'YYYY-MM-DD') AS date, amount::float AS amount
+             FROM cuspayments WHERE entry_id=$1 ORDER BY date ASC, id ASC`,
+            [id]
+        );
+        res.json(rows);
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ error: "Failed to fetch payments" });
+    }
+});
+
+// Add payment
+app.post("/cusentries/:id/cuspayments", async (req, res) => {
+    const client = await pool.connect();
+    try {
+        const { id } = req.params;
+        const { date, amount } = req.body;
+        const amt = Number(amount);
+        if (!date || !amt || amt <= 0) {
+            return res.status(400).json({ error: "Valid date and amount required" });
+        }
+
+        await client.query("BEGIN");
+        const entry = await client.query(
+            `SELECT pending_amount FROM cus_entries WHERE id=$1 FOR UPDATE`,
+            [id]
+        );
+        if (!entry.rows.length) {
+            await client.query("ROLLBACK");
+            return res.status(404).json({ error: "Entry not found" });
+        }
+        const pending = Number(entry.rows[0].pending_amount);
+        if (amt > pending) {
+            await client.query("ROLLBACK");
+            return res.status(400).json({ error: "Payment exceeds pending amount" });
+        }
+
+        await client.query(
+            `INSERT INTO cuspayments (entry_id, date, amount) VALUES ($1,$2,$3)`,
+            [id, date, amt]
+        );
+        await client.query(
+            `UPDATE cus_entries SET pending_amount = pending_amount - $1 WHERE id=$2`,
+            [amt, id]
+        );
+        await client.query("COMMIT");
+        res.status(201).json({ ok: true });
+    } catch (e) {
+        await client.query("ROLLBACK").catch(() => {});
+        console.error(e);
+        res.status(500).json({ error: "Failed to add payment" });
+    } finally {
+        client.release();
+    }
+});
+
+// Update payment
+// PUT /payments/:id
+app.put("/cuspayments/:id", async (req, res) => {
+    const { id } = req.params;
+    const { date, amount } = req.body;
+
+    const client = await pool.connect();
+    try {
+        await client.query("BEGIN");
+
+        // update payment row
+        const updatePayment = await client.query(
+            `UPDATE cuspayments SET date=$1, amount=$2 WHERE id=$3 RETURNING entry_id`,
+            [date, amount, id]
+        );
+
+        if (updatePayment.rows.length === 0) {
+            await client.query("ROLLBACK");
+            return res.status(404).json({ error: "Payment not found" });
+        }
+
+        const entryId = updatePayment.rows[0].entry_id;
+
+        // recalc pending amount
+        await client.query(
+            `UPDATE cus_entries g
+             SET pending_amount = g.total_cost - COALESCE((
+                                                              SELECT SUM(amount) FROM cuspayments WHERE entry_id=$1
+                                                          ), 0)
+             WHERE g.id=$1`,
+            [entryId]
+        );
+
+        await client.query("COMMIT");
+        res.json({ success: true });
+    } catch (err) {
+        await client.query("ROLLBACK");
+        console.error("Error updating payment", err);
+        res.status(500).json({ error: "Failed to update payment" });
+    } finally {
+        client.release();
+    }
+});
+
+// Delete payment
+app.delete("/cuspayments/:id", async (req, res) => {
+    const client = await pool.connect();
+    try {
+        await client.query("BEGIN");
+
+        const { id } = req.params;
+        const pay = await client.query(
+            `SELECT entry_id, amount FROM cuspayments WHERE id=$1 FOR UPDATE`,
+            [id]
+        );
+        if (!pay.rows.length) {
+            await client.query("ROLLBACK");
+            return res.status(404).json({ error: "Payment not found" });
+        }
+
+        const entryId = pay.rows[0].entry_id;
+        const amt = Number(pay.rows[0].amount);
+
+        await client.query(
+            `UPDATE cus_entries SET pending_amount = pending_amount + $1 WHERE id=$2`,
+            [amt, entryId]
+        );
+
+        await client.query(`DELETE FROM cuspayments WHERE id=$1`, [id]);
+
+        await client.query("COMMIT");
+        res.json({ ok: true });
+    } catch (e) {
+        await client.query("ROLLBACK").catch(() => {});
+        console.error(e);
+        res.status(500).json({ error: "Failed to delete payment" });
+    } finally {
+        client.release();
+    }
+});
 app.listen(3000, () => console.log("Server running on port 3000"));
+
 
 
 
