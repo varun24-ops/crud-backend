@@ -287,41 +287,14 @@ app.delete('/deleteBill/:id', async (req, res) => {
 app.post('/postBill/:id', async (req, res) => {
     try {
         const customerId = req.params.id;
-        const { name, amount, paid, pending, imageBase64, imageName } = req.body;
+        const { name, amount, paid, pending } = req.body;
 
-        let billPhotoUrl = null;
-
-        // 1️⃣ Upload image to Supabase if provided
-        if (imageBase64 && imageName) {
-            const buffer = Buffer.from(imageBase64, 'base64');
-            const { data, error } = await supabase
-                .storage
-                .from('uploads') // your bucket name
-                .upload(`bills/${Date.now()}-${imageName}`, buffer, {
-                    cacheControl: '3600',
-                    upsert: false,
-                    contentType: 'image/jpeg', // or dynamically detect
-                });
-
-            if (error) {
-                console.error("Supabase upload error:", error);
-                return res.status(500).send("Error uploading image");
-            }
-
-            // 2️⃣ Get public URL
-            const { publicUrl } = supabase
-                .storage
-                .from('uploads')
-                .getPublicUrl(data.path);
-
-            billPhotoUrl = publicUrl;
-        }
-
+        
         // 3️⃣ Insert bill record with image URL
         const insertQuery = `
-      INSERT INTO bills (customer_id, name, amount, paid, pending, date, billPhotoUrl)
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
-      RETURNING bill_id, date, billPhotoUrl
+      INSERT INTO bills (customer_id, name, amount, paid, pending, date)
+      VALUES ($1, $2, $3, $4, $5, $6)
+      RETURNING bill_id, date
     `;
 
         const result = await pool.query(insertQuery, [
@@ -331,7 +304,6 @@ app.post('/postBill/:id', async (req, res) => {
             paid,
             pending,
             new Date(),
-            billPhotoUrl
         ]);
 
         res.json(result.rows[0]);
@@ -752,6 +724,7 @@ app.get('/getsales', async (req, res) => {
 
 
 app.listen(3000, () => console.log("Server running on port 3000"));
+
 
 
 
