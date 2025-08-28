@@ -65,7 +65,7 @@ app.delete('/deleteProduct/:id', async (req, res) => {
 
 app.put("/updateProduct/:id", async (req, res) => {
     const { id } = req.params;
-    const { newname, newcost, newphoto } = req.body;
+    const { newname, newcost} = req.body;
 
     try {
         // Check if another product with same name exists
@@ -80,8 +80,8 @@ app.put("/updateProduct/:id", async (req, res) => {
 
         // Update record
         await pool.query(
-            "UPDATE products SET name = $1, cost = $2, photo = $3 WHERE id = $4",
-            [newname.trim(), newcost, newphoto, id]
+            "UPDATE products SET name = $1, cost = $2 WHERE id = $3",
+            [newname.trim(), newcost, id]
         );
 
         res.status(200).json({ success: true });
@@ -993,6 +993,7 @@ app.delete("/cuspayments/:id", async (req, res) => {
     }
 });
 app.listen(3000, () => console.log("Server running on port 3000"));
+
 
 
 
