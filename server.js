@@ -353,33 +353,32 @@ app.get('/getBillItemId/:id', async (req, res) => {
     }
 });
 
-app.put('/updateBill/:id', async (req, res) => {
+app.put('/updateBill/:id', async (req, res) => { 
     try {
-        console.log(req.params.id);
         const id = req.params.id;
-        const {amount, paid, pending} = req.body;
+        const { name, amount, paid, pending, cid } = req.body;
 
         const result = await pool.query(
             `UPDATE bills
-             SET name    = $1,
-                 amount  = $2,
-                 paid    = $3,
+             SET name = $1,
+                 amount = $2,
+                 paid = $3,
                  pending = $4,
                  customer_id = $5
-             WHERE bill_id = $6`,
+             WHERE bill_id = $6
+             RETURNING *`,
             [name, amount, paid, pending, cid, id]
         );
 
         if (result.rows.length === 0) {
-            return res.status(404).send("Product not found");
+            return res.status(404).send("Bill not found");
         }
 
         res.json(result.rows[0]);
     } catch (err) {
-        console.error("Error inserting postBill:", err);
-        res.status(500).send("Error creating bill");
+        console.error("Error updating bill:", err);
+        res.status(500).send("Error updating bill");
     }
-
 });
 
 //invoice-db
@@ -993,6 +992,7 @@ app.delete("/cuspayments/:id", async (req, res) => {
     }
 });
 app.listen(3000, () => console.log("Server running on port 3000"));
+
 
 
 
