@@ -357,7 +357,7 @@ app.put('/updateBill/:id', async (req, res) => {
     try {
         console.log(req.params.id);
         const id = req.params.id;
-        const {name, amount, paid, pending, cid} = req.body;
+        const {amount, paid, pending} = req.body;
 
         const result = await pool.query(
             `UPDATE bills
@@ -366,7 +366,7 @@ app.put('/updateBill/:id', async (req, res) => {
                  paid    = $3,
                  pending = $4,
                  customer_id = $5
-             WHERE bill_id = $6 RETURNING *`,
+             WHERE bill_id = $6`,
             [name, amount, paid, pending, cid, id]
         );
 
@@ -993,6 +993,7 @@ app.delete("/cuspayments/:id", async (req, res) => {
     }
 });
 app.listen(3000, () => console.log("Server running on port 3000"));
+
 
 
 
